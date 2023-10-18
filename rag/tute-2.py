@@ -15,10 +15,8 @@ splits = text_splitter.split_documents(loader.load())
 # Embed and store splits
 
 from langchain.vectorstores import Chroma
-# from langchain.embeddings import OpenAIEmbeddings
-# from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.embeddings import GPT4AllEmbeddings
-embeddings = GPT4AllEmbeddings(model="/dev/llm/ggml-model-gpt4all-falcon-q4_0.bin", n_ctx=512, n_threads=8)
+embeddings = GPT4AllEmbeddings(model="/dev/llm/ggml-all-MiniLM-L6-v2-f16.bin", n_ctx=512, n_threads=8)
 
 # vectorstore = Chroma.from_documents(documents=splits,embedding=OpenAIEmbeddings())
 vectorstore = Chroma.from_documents(documents=splits, embedding=embeddings)
@@ -27,19 +25,35 @@ retriever = vectorstore.as_retriever()
 # Prompt 
 # https://smith.langchain.com/hub/rlm/rag-prompt
 
+
+from langchain.llms import GPT4All
+# Callbacks support token-wise streaming
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+callbacks = [StreamingStdOutCallbackHandler()]
+llm = GPT4All(model="/dev/llm/ggml-model-gpt4all-falcon-q4_0.bin", callbacks=callbacks, verbose=True)
+
 from langchain import hub
 rag_prompt = hub.pull("rlm/rag-prompt")
 
-from langchain.llms import GPT4All
-llm = GPT4All(model="/dev/llm/ggml-model-gpt4all-falcon-q4_0.bin")
+from langchain.prompts import PromptTemplate
 
+template = """Use the following pieces of context to answer the question at the end. 
+If you don't know the answer, just say that you don't know, don't try to make up an answer. 
+Keep the answer as concise as possible. 
+Always say "thanks for asking!" at the end of the answer. 
+{context}
+Question: {question}
+Helpful Answer:"""
+rag_prompt_custom = PromptTemplate.from_template(template)
 # RAG chain 
 
 from langchain.schema.runnable import RunnablePassthrough
 rag_chain = (
     {"context": retriever, "question": RunnablePassthrough()} 
-    | rag_prompt 
+    | rag_prompt_custom 
     | llm 
+
 )
 
-rag_chain.invoke("What is Task Decomposition?")
+result = rag_chain.invoke("What is Task Decomposition?")
+
